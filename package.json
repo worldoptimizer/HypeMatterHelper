@@ -1,0 +1,9 @@
+{
+    "name": "Hype Matter Helper",
+    "description": "Helps in dealing with the matter.js Engine included in Tumult Hype 4",
+    "author": "Max Ziebell",
+    "main":	"HypeMatterHelper.js",
+    "license": "MIT",
+    "version": "1.0.0",
+    "dependencies": {}
+}
