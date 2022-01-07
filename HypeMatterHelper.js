@@ -1,11 +1,12 @@
 /*!
-Hype Matter Helper 1.0.0
+Hype Matter Helper 1.0.1
 copyright (c) 2021 Max Ziebell, (https://maxziebell.de). MIT-license
 */
 
 /*
 * Version-History
 * 1.0.0	Initial release under MIT-license
+* 1.0.1	applyForce now supports angle and distance for position
 */
 if("HypeMatterHelper" in window === false) window['HypeMatterHelper'] = (function () {
 
@@ -56,7 +57,7 @@ if("HypeMatterHelper" in window === false) window['HypeMatterHelper'] = (functio
 		 * @return {NodeList, Array} Makes sure we are dealing with a list
 		 */
 		 hypeDocument.resolveTargetToNodeList = function(target, singleNode, baseElm) {
-			return resolveTargetToNodeList(target, singleNode, baseElm || document.getElementById(hypeDocument.currentSceneId() ));
+			return resolveTargetToNodeList(target, singleNode, baseElm || document.getElementById(hypeDocument.currentSceneId() ));
 		}
 
 		/**
@@ -242,7 +243,7 @@ if("HypeMatterHelper" in window === false) window['HypeMatterHelper'] = (functio
 
 		/**
 		 * Add a force to an Matter object. It simplifies the process by using an angle. The source of the force is the element position (center), 
-		 * but can tweaked using the options to add angular momentum bny either an absolute position or relative position
+		 * but can tweaked using the options to add angular momentum by either an absolute position or relative position
 		 * 
 		 * 	There is an options object that can contain the following values
 		 * 	```
@@ -250,7 +251,7 @@ if("HypeMatterHelper" in window === false) window['HypeMatterHelper'] = (functio
 		 *		position: {
 		 *	 		x: 123,
 		 *			y: 456,
-		 *			relative: true,
+		 *			absolute: true,
 		 *		},
 		 *		usePercentOfMass: true
 		 *	}
@@ -259,7 +260,7 @@ if("HypeMatterHelper" in window === false) window['HypeMatterHelper'] = (functio
 		 * @param {String, NodeList, Node} target allows either type. Strings are considered a selector.
 		 * @param {Number} force Is the amount of force to apply. If the option usePercentOfMass is set to true it becomes a percentage value of the mass the force is applied to.
 		 * @param {Number} angle Is a angle in degrees 0-359 that is converted into a unit vector to be become multiplied by the forceMagnitude (0 is right, thereafter clockwise)
-		 * @param {Object} options This is an optional object containing options like position.x, position.y, position.relative and usePercentOfMass
+		 * @param {Object} options This is an optional object containing options.
 		 */
 		hypeDocument.applyForce = function(target, force, angle, options){
 			options = options || {};
@@ -272,17 +273,42 @@ if("HypeMatterHelper" in window === false) window['HypeMatterHelper'] = (functio
 			targetElms.forEach(function(elm){
 				var elmBody = hypeDocument.getElementProperty(elm, 'physics-body');
 				if (!elmBody.isStatic) {
-					forceMagnitude = options.usePercentOfMass? force/100 * elmBody.mass : force; 
+
+					// calculate faorce either absolute value or based on percentage of mass
+					forceMagnitude = options.usePercentOfMass? force/100 * elmBody.mass : force;
+
+					// we have a position request for the force
 					if (options.position){
-						if (options.position.relative) {
-							position = {
-								x: elmBody.position.x + options.position.x,
-								y: elmBody.position.y + options.position.y,
-							}
-						} else {
+						
+						// position is defined absolute to element position
+						
+                        if (options.position.absolute) {
+                            // take absolute position
 							position = options.position
+
+						} else {
+
+							// determine the position based on another angle and distance
+							if (options.position.angle != undefined) {
+								var distance = options.position.distance || 1;
+                                var angle = options.position.angle;
+								position = {
+									x: elmBody.position.x + Math.cos(angle * Math.PI/180) * distance,
+									y: elmBody.position.y + Math.sin(angle * Math.PI/180) * distance,
+								}
+								
+							// use offset with absolute position offset
+							} else {
+								position = {
+									x: elmBody.position.x + (options.position.x || 0),
+									y: elmBody.position.y + (options.position.y || 0),
+								}
+							}
 						}
-					} 
+					}
+
+					// apply force using custom position or default to element position
+					// use angle based unit vector and force magnitude
 					Matter.Body.applyForce(elmBody, position || elmBody.position, { 
 						x: unitVector.x * forceMagnitude,
 						y: unitVector.y * forceMagnitude
@@ -303,8 +329,11 @@ if("HypeMatterHelper" in window === false) window['HypeMatterHelper'] = (functio
 				usePercentOfMass: true
 			}));
 		}
+	
 		
-    /* Install CSS needed for this extension */
+		/**
+		 * Install CSS to the Head HTML on runtime
+		 */
 		if (!_installedCSS) {
 			_installedCSS = true;
 			var s=document.createElement("style");
@@ -315,19 +344,32 @@ if("HypeMatterHelper" in window === false) window['HypeMatterHelper'] = (functio
 		
 	}
 
+
+	function HypeScenePrepareForDisplay (hypeDocument, element, event) {
+		
+		// remove all disbaled pointer events, hence enable pointer events
+		hypeDocument.enablePointerEvents(element);
+
+		// disable all pointer events on elments matching the [data-disable-pointer-events] or .disablePointerEvents
+		hypeDocument.disablePointerEvents('[data-disable-pointer-events], .disablePointerEvents');
+		
+		// disable all pointer events on elments matching the [data-disable-collision] or .disableCollisions
+		hypeDocument.disablePhysicsCollisions('[data-disable-collision], .disableCollisions');
+	}
+
+
 	/* setup callbacks */
 	if("HYPE_eventListeners" in window === false) { window.HYPE_eventListeners = Array();}
 	window.HYPE_eventListeners.push({"type":"HypeDocumentLoad", "callback": HypeDocumentLoad});
-
+    window.HYPE_eventListeners.push({"type":"HypeScenePrepareForDisplay", "callback": HypeScenePrepareForDisplay});
+	
 	/**
 	 * @typedef {Object} HypeMatterHelper
 	 * @property {String} version Version of the extension
 	 * @property {Function} sample Boilerplate text
 	 */
 	 var HypeMatterHelper = {
-		version: '1.0.0',
-		/* expert */
-		resolveTargetToNodeList: resolveTargetToNodeList,
+		version: '1.0.1',
 	};
 
 	/** 
